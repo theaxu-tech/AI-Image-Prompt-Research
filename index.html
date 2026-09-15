@@ -1088,34 +1088,41 @@ function buildGapSummary(loc){
   const G = DATA.groups_global || {};
   const total = (DATA.meta && DATA.meta.total_prompts) ? DATA.meta.total_prompts : 1500000;
   const totalLbl = loc==='zh' ? `${Math.round(total/10000)} 万条` : `${(total/1e6).toFixed(1)} million`;
-  const pct = v => pctClean(v);
   const glabel = g => loc==='zh' ? (GROUP_ZH[g]||g) : g;
   const clabel = c => loc==='zh' ? (CAT_ZH[c]||c) : c;
   const ordered = GROUP_ORDER.filter(g=>G[g] && g!=='Other / ambiguous').sort((a,b)=>G[b].pct-G[a].pct);
   const other = G['Other / ambiguous'];
-  // top named sub-categories per group (skip catch-all buckets)
   const topCats = (g, n) => Object.entries(G[g].cats).filter(([k])=>k!=='other'&&k!=='edit-instruction').sort((a,b)=>b[1].pct-a[1].pct).slice(0,n).map(([k])=>clabel(k));
-  const joinList = arr => loc==='zh' ? arr.join('、') : (arr.length>1 ? arr.slice(0,-1).join(', ') + ' and ' + arr[arr.length-1] : arr[0]||'');
-  // overall top specific categories
+  const join = arr => loc==='zh' ? arr.join('、') : arr.join(', ');
   const allCats = [];
   ordered.forEach(g=>Object.entries(G[g].cats).forEach(([k,v])=>{ if(k!=='other'&&k!=='edit-instruction') allCats.push({k, pct:v.pct}); }));
   allCats.sort((a,b)=>b.pct-a.pct);
-  const top4 = allCats.slice(0,4).map(c=>`${clabel(c.k)} (${pct(c.pct)})`);
+  const top4 = allCats.slice(0,4);
+  const fmtPct = v => v >= 10 ? Math.round(v)+'%' : (Math.round(v*10)/10)+'%';
 
-  if(loc==='zh'){
-    const parts = ordered.map((g,i)=>{
-      const lead = i===0 ? `<b>${glabel(g)}占比最高，达 ${pct(G[g].pct)}</b>` : `<b>${glabel(g)}</b> ${pct(G[g].pct)}`;
-      return `${lead}（${joinList(topCats(g,3))}等）`;
-    });
-    const otherTxt = other ? `；不属于以上任何类型的内容（技术图纸、视频分镜、编辑指令）归入"其他/模糊"，占 ${(Math.round(other.pct*10)/10)}%` : '';
-    return `把全部 ${totalLbl} Prompt 按 CRAFT 评估规则的六个一级类型划分：${parts.join('；')}${otherTxt}。全部类型中最常见的具体类目是${top4.join('、').replace(/ \(/g,'（').replace(/\)/g,'）')}。`;
-  }
-  const parts = ordered.map((g,i)=>{
-    const lead = i===0 ? `<b>${glabel(g)} leads at ${pct(G[g].pct)}</b>` : `<b>${glabel(g)}</b> ${pct(G[g].pct)}`;
-    return `${lead} (${joinList(topCats(g,3))})`;
-  });
-  const otherTxt = other ? `; anything that fits none of the six types — technical drawings, video/storyboard sequences, editing instructions — lands in "Other / ambiguous" (${(Math.round(other.pct*10)/10)}%)` : '';
-  return `Sorting all ${totalLbl} prompts into the six CRAFT artefact types: ${parts.join('; ')}${otherTxt}. The most common specific categories overall are ${joinList(top4)}.`;
+  const rows = ordered.map(g=>`
+    <li style="display:flex; align-items:baseline; gap:10px; padding:6px 0; border-bottom:1px solid var(--md-outline-variant);">
+      <span class="legend-dot" style="background:${GROUP_COLORS[g]}; flex:none; position:relative; top:2px;"></span>
+      <span style="flex:1; min-width:0;"><b>${glabel(g)}</b><span class="on-surface-variant"> · ${join(topCats(g,3))}${loc==='zh'?'等':' …'}</span></span>
+      <span class="mono-num" style="flex:none; font-weight:600;">${fmtPct(G[g].pct)}</span>
+    </li>`).join('');
+  const otherRow = other ? `
+    <li style="display:flex; align-items:baseline; gap:10px; padding:6px 0;">
+      <span class="legend-dot" style="background:${GROUP_COLORS['Other / ambiguous']}; flex:none; position:relative; top:2px;"></span>
+      <span style="flex:1; min-width:0;"><b>${glabel('Other / ambiguous')}</b><span class="on-surface-variant"> · ${loc==='zh'?'技术图纸、视频分镜、编辑指令（CRAFT 规则范围之外）':'technical drawings, video/storyboards, editing instructions (out of CRAFT scope)'}</span></span>
+      <span class="mono-num" style="flex:none; font-weight:600;">${fmtPct(other.pct)}</span>
+    </li>` : '';
+
+  const intro = loc==='zh'
+    ? `全部 ${totalLbl} Prompt 按 CRAFT 评估规则的六个一级类型划分，占比与主要类目如下：`
+    : `All ${totalLbl} prompts sorted into the six CRAFT artefact types — share of prompts and the leading categories within each:`;
+  const outro = loc==='zh'
+    ? `跨全部类型看，最常见的具体类目是：${top4.map(c=>`<b>${clabel(c.k)}</b>（${fmtPct(c.pct)}）`).join('、')}。`
+    : `Across all types, the most common specific categories are ${top4.map(c=>`<b>${clabel(c.k)}</b> (${fmtPct(c.pct)})`).join(', ')}.`;
+
+  return `<p class="type-body mb-2">${intro}</p>
+    <ul style="list-style:none; margin:0 0 12px 0; padding:0;">${rows}${otherRow}</ul>
+    <p class="type-body">${outro}</p>`;
 }
 
 function T_group(key){ return currentLocale==='zh' ? (GROUP_ZH[key]||key) : key; }
@@ -1434,7 +1441,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-15T09:37:54Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-15T09:48:03Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -1793,7 +1800,7 @@ pageRenderers.overview = function(container){
         <div class="card">
           <h3 class="type-title mb-3">${L_.overview.gapTitle}</h3>
           <div class="type-body-sm on-surface-variant mb-3">${L_.overview.gapBasis}</div>
-          <p class="type-body">${L_.overview.gapBody()}</p>
+          <div>${L_.overview.gapBody()}</div>
           <button class="btn btn-text mt-2" id="btnGapDetail"><span class="msr">arrow_forward</span>${L_.overview.gapLink}</button>
         </div>
       </div>
