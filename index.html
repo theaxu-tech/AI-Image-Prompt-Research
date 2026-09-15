@@ -1384,6 +1384,32 @@ const DEFAULT_BANNER_SVG = `
   <polygon points="460,300 520,340 500,410 430,400 415,340" fill="#FFD48A" opacity="0.9"/>
 </svg>`;
 
+let __lastUpdatedCache = null;
+async function fetchAndShowLastUpdated(){
+  const el = document.getElementById('bannerUpdated');
+  if(!el) return;
+  const loadingTxt = currentLocale==='zh' ? '正在获取更新时间…' : 'Loading update time…';
+  el.textContent = loadingTxt;
+  try{
+    if(__lastUpdatedCache === null){
+      const resp = await fetch('https://api.github.com/repos/theaxu-tech/AI-Image-Prompt-Research/commits?path=index.html&per_page=1');
+      if(!resp.ok) throw new Error('bad response');
+      const data = await resp.json();
+      const dateStr = data && data[0] && data[0].commit && (data[0].commit.committer.date || data[0].commit.author.date);
+      if(!dateStr) throw new Error('no date');
+      __lastUpdatedCache = new Date(dateStr);
+    }
+    const d = __lastUpdatedCache;
+    const formatted = currentLocale==='zh'
+      ? `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      : d.toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    const label = currentLocale==='zh' ? `最后更新于 ${formatted}` : `Last updated ${formatted}`;
+    el.textContent = label;
+  }catch(e){
+    el.textContent = '';
+  }
+}
+
 function renderBanner(){
   return `
     <div class="banner" id="bannerRoot">
@@ -1394,6 +1420,7 @@ function renderBanner(){
         </div>
         <p class="banner-sub">A data-driven look at 1.5 million real AI image prompts — what people create, which styles they want, and how those requests break down.</p>
         <p class="banner-author">@Thea Xu</p>
+        <p class="banner-updated" id="bannerUpdated" style="font-size:12px; opacity:0.65; margin-top:2px;"></p>
       </div>
       <div class="banner-image-wrap" id="bannerImageWrap">
         ${bannerState.imageDataUrl ? `<img src="${bannerState.imageDataUrl}" alt="Banner image">` : DEFAULT_BANNER_SVG}
@@ -1778,6 +1805,7 @@ pageRenderers.overview = function(container){
   }
 
   container.querySelector('#btnGoPromptSet').addEventListener('click', ()=>navigateTo('promptset'));
+  fetchAndShowLastUpdated();
   container.querySelector('#btnGapDetail').addEventListener('click', ()=>navigateTo('scenarios'));
   container.querySelector('#btnCard1Examples').addEventListener('click', ()=>openExamplesDrawer(L_.overview.card1Label, DATA.random_examples));
   container.querySelector('#btnCard2Examples').addEventListener('click', ()=>openExamplesDrawer(catLabel(topSpecific), topSpecific.examples));
