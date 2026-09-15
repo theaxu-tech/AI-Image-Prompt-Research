@@ -695,7 +695,7 @@ en: {
     viewExamples:'View examples',
     gapTitle:'Content type breakdown, at a glance',
     gapBasis:'A summary of the Scenarios page findings',
-    gapBody:`Sorting all 1.5 million prompts into the six CRAFT artefact types: <b>layout-style design (text-light) leads at 39%</b> — posters, presentations, documents, infographics, invitations and other multi-element layouts — followed by <b>photorealistic images at 35%</b> (people, food, places, products and other realistic scenes). <b>Stylised images</b> (illustration, cartoon, painterly work, avatars) make up 13%, <b>symbols &amp; logos</b> 10%, while pure <b>surfaces</b> (patterns, textures, gradients) and <b>prose-heavy designs</b> (articles, resumes, reports) are each around 1%. The most common specific categories overall are documents (10%), presentation slides (9%), artwork &amp; illustration (9%) and logos (8%).`,
+    gapBody:()=>buildGapSummary('en'),
     gapLink:'See the full breakdown in Scenarios',
     nextStepTitle:'Recommended next step',
     nextStepBody:'Rebalance the Prompt Set to match real usage, and add the three newly-found "Uncategorised" needs as proper categories.',
@@ -857,7 +857,7 @@ zh: {
     viewExamples:'查看示例',
     gapTitle:'内容类型分布一览',
     gapBasis:'"生成场景"页发现的汇总',
-    gapBody:`把全部 150 万条 Prompt 按 CRAFT 的六个一级类型划分：<b>排版型设计（text-light）占比最高，达 39%</b>——海报、演示文稿、文档、信息图、邀请函等多元素排版；其次是<b>写实图像，占 35%</b>（人物、美食、场景、产品等写实画面）。<b>风格化图像</b>（插画、卡通、绘画、头像）占 13%，<b>符号与 Logo</b> 占 10%，而纯<b>表面类</b>（图案、纹理、渐变）和<b>正文型设计</b>（文章、简历、报告）各约 1%。全部类型中最常见的具体类目是文档（10%）、演示文稿（9%）、插画作品（9%）和 Logo（8%）。`,
+    gapBody:()=>buildGapSummary('zh'),
     gapLink:'查看"生成场景"页的完整拆解',
     nextStepTitle:'建议的下一步',
     nextStepBody:'按真实使用比例重新调整测试集权重，并把新发现的三类"未分类"需求正式纳入分类体系。',
@@ -1082,6 +1082,42 @@ const GROUP_ORDER = ["Symbol & logo","Design (text-heavy)","Design (text-light)"
 const GROUP_ZH = {"Symbol & logo":"符号与 Logo","Design (text-heavy)":"设计（正文型）","Design (text-light)":"设计（排版型）","Surface, pattern & texture":"表面 / 图案 / 纹理","Photorealistic image":"写实图像","Stylised image":"风格化图像","Other / ambiguous":"其他 / 模糊"};
 const GROUP_COLORS = {"Symbol & logo":"#6750A4","Design (text-heavy)":"#7D5260","Design (text-light)":"#3D6DAA","Surface, pattern & texture":"#C48A2B","Photorealistic image":"#1F6E5C","Stylised image":"#D6547A","Other / ambiguous":"#8A8A8A"};
 const GROUP_ICONS = {"Symbol & logo":"token","Design (text-heavy)":"article","Design (text-light)":"design_services","Surface, pattern & texture":"texture","Photorealistic image":"photo_camera","Stylised image":"brush","Other / ambiguous":"help"};
+
+// Overview summary paragraph — generated from the live classification data so it can never drift from the Scenarios page.
+function buildGapSummary(loc){
+  const G = DATA.groups_global || {};
+  const total = (DATA.meta && DATA.meta.total_prompts) ? DATA.meta.total_prompts : 1500000;
+  const totalLbl = loc==='zh' ? `${Math.round(total/10000)} 万条` : `${(total/1e6).toFixed(1)} million`;
+  const pct = v => pctClean(v);
+  const glabel = g => loc==='zh' ? (GROUP_ZH[g]||g) : g;
+  const clabel = c => loc==='zh' ? (CAT_ZH[c]||c) : c;
+  const ordered = GROUP_ORDER.filter(g=>G[g] && g!=='Other / ambiguous').sort((a,b)=>G[b].pct-G[a].pct);
+  const other = G['Other / ambiguous'];
+  // top named sub-categories per group (skip catch-all buckets)
+  const topCats = (g, n) => Object.entries(G[g].cats).filter(([k])=>k!=='other'&&k!=='edit-instruction').sort((a,b)=>b[1].pct-a[1].pct).slice(0,n).map(([k])=>clabel(k));
+  const joinList = arr => loc==='zh' ? arr.join('、') : (arr.length>1 ? arr.slice(0,-1).join(', ') + ' and ' + arr[arr.length-1] : arr[0]||'');
+  // overall top specific categories
+  const allCats = [];
+  ordered.forEach(g=>Object.entries(G[g].cats).forEach(([k,v])=>{ if(k!=='other'&&k!=='edit-instruction') allCats.push({k, pct:v.pct}); }));
+  allCats.sort((a,b)=>b.pct-a.pct);
+  const top4 = allCats.slice(0,4).map(c=>`${clabel(c.k)} (${pct(c.pct)})`);
+
+  if(loc==='zh'){
+    const parts = ordered.map((g,i)=>{
+      const lead = i===0 ? `<b>${glabel(g)}占比最高，达 ${pct(G[g].pct)}</b>` : `<b>${glabel(g)}</b> ${pct(G[g].pct)}`;
+      return `${lead}（${joinList(topCats(g,3))}等）`;
+    });
+    const otherTxt = other ? `；不属于以上任何类型的内容（技术图纸、视频分镜、编辑指令）归入"其他/模糊"，占 ${(Math.round(other.pct*10)/10)}%` : '';
+    return `把全部 ${totalLbl} Prompt 按 CRAFT 评估规则的六个一级类型划分：${parts.join('；')}${otherTxt}。全部类型中最常见的具体类目是${top4.join('、').replace(/ \(/g,'（').replace(/\)/g,'）')}。`;
+  }
+  const parts = ordered.map((g,i)=>{
+    const lead = i===0 ? `<b>${glabel(g)} leads at ${pct(G[g].pct)}</b>` : `<b>${glabel(g)}</b> ${pct(G[g].pct)}`;
+    return `${lead} (${joinList(topCats(g,3))})`;
+  });
+  const otherTxt = other ? `; anything that fits none of the six types — technical drawings, video/storyboard sequences, editing instructions — lands in "Other / ambiguous" (${(Math.round(other.pct*10)/10)}%)` : '';
+  return `Sorting all ${totalLbl} prompts into the six CRAFT artefact types: ${parts.join('; ')}${otherTxt}. The most common specific categories overall are ${joinList(top4)}.`;
+}
+
 function T_group(key){ return currentLocale==='zh' ? (GROUP_ZH[key]||key) : key; }
 function groupsSource(lang){ return (lang==='All' || !lang) ? DATA.groups_global : (DATA.groups_per_lang[lang] || {}); }
 function groupColor(g){ return GROUP_COLORS[g] || '#8A8A8A'; }
@@ -1398,7 +1434,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-15T09:20:27Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-15T09:37:54Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -1757,7 +1793,7 @@ pageRenderers.overview = function(container){
         <div class="card">
           <h3 class="type-title mb-3">${L_.overview.gapTitle}</h3>
           <div class="type-body-sm on-surface-variant mb-3">${L_.overview.gapBasis}</div>
-          <p class="type-body">${L_.overview.gapBody}</p>
+          <p class="type-body">${L_.overview.gapBody()}</p>
           <button class="btn btn-text mt-2" id="btnGapDetail"><span class="msr">arrow_forward</span>${L_.overview.gapLink}</button>
         </div>
       </div>
