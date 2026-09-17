@@ -1449,7 +1449,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T02:34:15Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T02:37:23Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2274,7 +2274,7 @@ function openLengthBucketDrawer(bucketName, range, unitWord, key){
     <div class="side-sheet-body">
       <div class="type-title-sm mb-2">${S.examplePrompts}</div>
       ${reqLegendHTML(REQ_KINDS_ALL)}
-      ${examples.map(e=>highlightedExampleCard(e.text, REQ_KINDS_ALL, `<div class="type-label-sm on-surface-variant mb-1 mono-num">${e.words} ${wordsLbl}</div>`)).join('')}
+      ${examples.map((e,i)=>exampleCard(e.text, i, {hl: REQ_KINDS_ALL, words: e.words})).join('')}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
@@ -2309,10 +2309,33 @@ function highlightRequests(text, kinds){
   out += s.slice(pos);
   return {html: out, kinds: Array.from(found)};
 }
-function highlightedExampleCard(e, kinds, extraLine){
-  const r = highlightRequests((e||'').slice(0,500), kinds);
-  const kl = r.kinds.length ? `<div class="req-kinds">${r.kinds.map(reqKindLabel).join(' · ')}</div>` : '';
-  return `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;">${extraLine||''}<span class="type-body-sm">"${r.html}"</span>${kl}</div>`;
+const LANG_STOP = {
+  English: /\b(the|and|with|of|for|in|a|an|on|featuring|showing|design|style|background)\b/gi,
+  Spanish: /\b(el|la|los|las|de|del|con|para|una?|en|y|que|estilo|dise[ñn]o|fondo|mostrando)\b/gi,
+  Portuguese: /\b(um|uma|de|do|da|dos|das|com|para|em|e|que|estilo|design|fundo|mostrando|apresentando)\b/gi,
+  French: /\b(le|la|les|de|des|du|un|une|avec|pour|et|dans|sur|style|fond|montrant|pr[eé]sentant)\b/gi,
+  Indonesian: /\b(dengan|dan|yang|untuk|di|dari|pada|sebuah|latar|gaya|menampilkan|desain)\b/gi,
+};
+function detectLang(text){
+  const t = (text||'').toLowerCase(); let best='English', bestN=-1;
+  for(const [lang, re] of Object.entries(LANG_STOP)){ const n = (t.match(re)||[]).length; if(n>bestN){ best=lang; bestN=n; } }
+  return best;
+}
+function wordCount(text){ return ((text||'').trim().match(/\S+/g)||[]).length; }
+function exampleHeader(idx, text, wordsOverride){
+  const lang = detectLang(text); const n = wordsOverride!=null ? wordsOverride : wordCount(text);
+  const wordsLbl = currentLocale==='zh' ? '词' : 'words';
+  return `<div class="type-label-sm on-surface-variant mb-1 mono-num">${String(idx+1).padStart(2,'0')} · ${T_lang(lang)} · ${n} ${wordsLbl}</div>`;
+}
+function exampleCard(e, idx, opts){
+  opts = opts || {};
+  const text = e || '';
+  const body = opts.hl ? highlightRequests(text, opts.hl) : {html: escapeHtml(text), kinds: []};
+  const kl = body.kinds.length ? `<div class="req-kinds">${body.kinds.map(reqKindLabel).join(' · ')}</div>` : '';
+  return `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;">${exampleHeader(idx, text, opts.words)}<span class="type-body-sm" style="white-space:pre-wrap;">${body.html}</span>${kl}</div>`;
+}
+function highlightedExampleCard(e, kinds, extraLine, idx, words){
+  return exampleCard(e, idx||0, {hl: kinds, words: words});
 }
 function reqLegendHTML(kinds){
   const note = currentLocale==='zh' ? '紫色加粗 = 从该 Prompt 中识别出的（关键词匹配，仅供参考）' : 'Purple bold = requests detected in each prompt (keyword-based, approximate):';
@@ -2330,7 +2353,7 @@ function openExamplesDrawer(title, examples, hl){
     <div class="side-sheet-body">
       <div class="type-title-sm mb-2">${S.examplePrompts}</div>
       ${hl ? reqLegendHTML(hl) : ''}
-      ${(examples||[]).map(e=> hl ? highlightedExampleCard(e, hl) : `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;"><span class="type-body-sm">"${(e||'').slice(0,300)}"</span></div>`).join('') || `<p class="type-body-sm on-surface-variant">—</p>`}
+      ${(examples||[]).map((e,i)=> exampleCard(e, i, hl ? {hl: hl} : {})).join('') || `<p class="type-body-sm on-surface-variant">—</p>`}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
@@ -2535,7 +2558,7 @@ function openStyleDetail(name){
       <div class="kv-row"><span class="k">${S.controlLbl}</span><span class="v">${v.top_controls[0]?T_control(v.top_controls[0][0]):'—'}</span></div>
       <div class="type-title-sm mt-4 mb-2">${L().scenarios.examplePrompts}</div>
       ${reqLegendHTML(['style_specified'])}
-      ${v.examples.map(e=>highlightedExampleCard(e, ['style_specified'])).join('')}
+      ${v.examples.map((e,i)=>exampleCard(e, i, {hl: ['style_specified']})).join('')}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
