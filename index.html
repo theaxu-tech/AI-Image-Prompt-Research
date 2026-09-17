@@ -126,6 +126,7 @@ h1,h2,h3,h4,h5,p{margin:0;}
 .req-k-typography_specified{ color:var(--rq-typo); } .req-k-lighting_camera_specified{ color:var(--rq-light); } .req-k-material_specified{ color:var(--rq-mat); }
 .req-k-spatial_relationship{ color:var(--rq-spat); } .req-k-explicit_count{ color:var(--rq-count); } .req-k-negative_constraint{ color:var(--rq-neg); }
 .req-k-quality_expectation{ color:var(--rq-qual); } .req-k-aspect_ratio_specified{ color:var(--rq-ar); }
+.req-k-doctype{ color:var(--md-on-surface); text-decoration:underline; text-decoration-color:var(--md-primary); text-decoration-thickness:2px; text-underline-offset:2px; }
 .req-legend-item{ display:inline-flex; align-items:center; gap:4px; }
 .req-legend{ display:flex; flex-wrap:wrap; gap:6px 12px; margin:0 0 10px; }
 .req-legend span{ font-size:12px; color:var(--md-on-surface-variant); }
@@ -1464,7 +1465,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T07:23:33Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T07:26:18Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2312,8 +2313,8 @@ const REQ_LEX = {
   quality_expectation: /\b(high[- ]quality|high[- ]resolution|high-end|4k|8k|ultra hd|highly detailed|detailed|professional quality|print[- ]ready|crisp|sharp focus|ultra[- ]detailed)\b/gi,
   aspect_ratio_specified: /\b(aspect ratio|16:9|4:3|1:1|9:16|3:2|portrait orientation|landscape orientation|square format|vertical format|horizontal format|\d{3,4}\s?[x×]\s?\d{3,4}\s?(?:px|pixels?)?)\b/gi,
 };
-const REQ_KINDS_ALL = Object.keys(REQ_LEX);
-function reqKindLabel(k){ return k==='style_specified' ? (currentLocale==='zh'?'风格':'Style') : T_control(k); }
+const REQ_KINDS_ALL = Object.keys(REQ_LEX).concat(['doctype']);
+function reqKindLabel(k){ if(k==='doctype') return 'Doctype'; return k==='style_specified' ? (currentLocale==='zh'?'风格':'Style') : T_control(k); }
 function highlightRequests(text, kinds){
   kinds = kinds || REQ_KINDS_ALL;
   let s = escapeHtml(text || '');
@@ -2969,9 +2970,11 @@ function updateFabForPage(pageId){
 
 
 const sourceLookup=new Map(DATA.examples_metadata.map(c=>[c.synthetic_prompt,c]));
+const DOCTYPE_RX = /\b(posters?|flyers?|logos?|icons?|favicons?|banners?|presentations?|slide decks?|pitch decks?|slides?|websites?|web pages?|webpages?|landing pages?|home ?pages?|dashboards?|documents?|worksheets?|forms?|invitations?|menus?|packaging|business cards?|calendars?|certificates?|diplomas?|book covers?|covers?|thumbnails?|infographics?|charts?|diagrams?|brochures?|booklets?|pamphlets?|leaflets?|bookmarks?|postcards?|greeting cards?|cards?|collages?|mood ?boards?|stickers?|decals?|labels?|signage|signs?|memes?|wallpapers?|patterns?|textures?|photographs?|photos?|photography|portraits?|headshots?|illustrations?|cartoons?|sketch(?:es)?|drawings?|paintings?|comics?|comic strips?|coloring (?:pages?|books?)|clip ?art|avatars?|profile pictures?|3d renders?|storyboards?|videos?|animations?|floor plans?|blueprints?|resumes?|cvs?|articles?|newspapers?|magazines?|mock-?ups?|templates?|emails?|newsletters?|advertisements?|ads?)\b/gi;
+function doctypeRanges(text){ const out=[]; const re=new RegExp(DOCTYPE_RX.source,'gi'); let m; while((m=re.exec(text))){ out.push([m.index, m.index+m[0].length]); if(re.lastIndex===m.index) re.lastIndex++; } return out; }
 function highlightRequests(text,kinds,styleName){
  const c=sourceLookup.get(text), all=[];kinds=kinds||REQ_KINDS_ALL;
- for(const k of kinds){const ranges=k==='style_specified'&&styleName?(c?.style_evidence?.[styleName]||[]):(c?.evidence?.[k]||[]);for(const [a,b] of ranges)all.push([a,b,k]);}
+ for(const k of kinds){const ranges=k==='doctype'?doctypeRanges(text):(k==='style_specified'&&styleName?(c?.style_evidence?.[styleName]||[]):(c?.evidence?.[k]||[]));for(const [a,b] of ranges)all.push([a,b,k]);}
  all.sort((a,b)=>a[0]-b[0]||b[1]-a[1]);let pos=0,html='';const found=new Set();
  for(const [a,b,k] of all){if(a<pos)continue;html+=escapeHtml(text.slice(pos,a))+`<mark class="req req-k-${k}" title="${escapeHtml(reqKindLabel(k))}">${escapeHtml(text.slice(a,b))}</mark>`;pos=b;found.add(k);}
  html+=escapeHtml(text.slice(pos));return {html,kinds:[...found]};
