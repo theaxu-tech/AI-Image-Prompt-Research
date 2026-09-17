@@ -109,6 +109,10 @@ h1,h2,h3,h4,h5,p{margin:0;}
 .type-body-sm{font-size:13.5px; line-height:20px; font-weight:400;}
 .type-label{font-size:13px; line-height:16px; font-weight:500; letter-spacing:0.02em;}
 .type-label-sm{font-size:11.5px; line-height:16px; font-weight:500; letter-spacing:0.03em;}
+.req{ color:var(--md-primary); font-weight:700; background:transparent; }
+.req-legend{ display:flex; flex-wrap:wrap; gap:6px 12px; margin:0 0 10px; }
+.req-legend span{ font-size:12px; color:var(--md-on-surface-variant); }
+.req-kinds{ margin-top:6px; font-size:11.5px; color:var(--md-on-surface-variant); }
 .mono-num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
 
 .on-surface-variant{color:var(--md-on-surface-variant);}
@@ -1445,7 +1449,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T02:20:25Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T02:34:15Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -1864,8 +1868,8 @@ pageRenderers.overview = function(container){
   container.querySelector('#btnGapDetail').addEventListener('click', ()=>navigateTo('scenarios'));
   container.querySelector('#btnCard1Examples').addEventListener('click', ()=>openExamplesDrawer(L_.overview.card1Label, DATA.random_examples));
   container.querySelector('#btnCard2Examples').addEventListener('click', ()=>openExamplesDrawer(catLabel(topSpecific), topSpecific.examples));
-  container.querySelector('#btnCard3Examples').addEventListener('click', ()=>openExamplesDrawer(topStyle[0], topStyle[1].examples));
-  container.querySelector('#btnCard4Examples').addEventListener('click', ()=>openExamplesDrawer(T_control(topCtrl[0]), DATA.control_flag_examples[topCtrl[0]]||[]));
+  container.querySelector('#btnCard3Examples').addEventListener('click', ()=>openExamplesDrawer(topStyle[0], topStyle[1].examples, ['style_specified']));
+  container.querySelector('#btnCard4Examples').addEventListener('click', ()=>openExamplesDrawer(T_control(topCtrl[0]), DATA.control_flag_examples[topCtrl[0]]||[], REQ_KINDS_ALL));
   container.querySelectorAll('.findRow').forEach(row=>{
     row.addEventListener('click', ()=>{
       const kind = row.dataset.kind, key = row.dataset.key;
@@ -1874,8 +1878,8 @@ pageRenderers.overview = function(container){
         const src = (DATA.groups_global[macro]||{}).cats||{};
         openExamplesDrawer(T_cat(catKey), (src[catKey]||{}).examples||[]);
       }
-      else if(kind==='style') openExamplesDrawer(key, (DATA.style11_detail[key]||{}).examples||[]);
-      else if(kind==='control') openExamplesDrawer(T_control(key), DATA.control_flag_examples[key]||[]);
+      else if(kind==='style') openExamplesDrawer(key, (DATA.style11_detail[key]||{}).examples||[], ['style_specified']);
+      else if(kind==='control') openExamplesDrawer(T_control(key), DATA.control_flag_examples[key]||[], REQ_KINDS_ALL);
       else if(kind==='cluster'){
         const c = t1[+key];
         openExamplesDrawer(`${T_groupShort(c.group)} + ${T_cat(c.cat)} + ${c.style}`, c.examples||[c.example]);
@@ -1983,7 +1987,7 @@ function renderLengthAccordion(root){
         if(!elements.length) return;
         const k = nctrlKeys[elements[0].index];
         const examples = DATA.nctrl_examples[k] || [];
-        openExamplesDrawer(k+askWord, examples);
+        openExamplesDrawer(k+askWord, examples, REQ_KINDS_ALL);
       },
       onHover:(evt,elements)=>{ evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
       plugins:{legend:{display:false}, tooltip:{callbacks:{
@@ -2025,7 +2029,7 @@ function renderControlsAccordion(root){
       const a = row.dataset.pairA, b = row.dataset.pairB;
       const key = `${a}|${b}`;
       const examples = DATA.control_pair_examples[key] || [];
-      openExamplesDrawer(`${T_control(a)} + ${T_control(b)}`, examples);
+      openExamplesDrawer(`${T_control(a)} + ${T_control(b)}`, examples, REQ_KINDS_ALL);
     });
   });
 
@@ -2269,16 +2273,54 @@ function openLengthBucketDrawer(bucketName, range, unitWord, key){
     </div>
     <div class="side-sheet-body">
       <div class="type-title-sm mb-2">${S.examplePrompts}</div>
-      ${examples.map(e=>`<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;">
-        <div class="type-label-sm on-surface-variant mb-1 mono-num">${e.words} ${wordsLbl}</div>
-        <span class="type-body-sm">"${(e.text||'').slice(0,500)}"</span>
-      </div>`).join('')}
+      ${reqLegendHTML(REQ_KINDS_ALL)}
+      ${examples.map(e=>highlightedExampleCard(e.text, REQ_KINDS_ALL, `<div class="type-label-sm on-surface-variant mb-1 mono-num">${e.words} ${wordsLbl}</div>`)).join('')}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
 }
 
-function openExamplesDrawer(title, examples){
+// ---- Request highlighting: mark the style words / explicit requests inside example prompts ----
+const REQ_LEX = {
+  style_specified: /\b(modern|minimalist|minimal|clean|contemporary|sleek|professional|corporate|elegant|luxury|luxurious|premium|sophisticated|upscale|high-end|bold|vibrant|colorful|colourful|dynamic|energetic|soft|pastel|muted|gentle|subtle|cute|playful|cartoon(?:ish)?|whimsical|fun|realistic|photorealistic|hyper-?realistic|cinematic|dramatic|retro|vintage|nostalgic|rustic|illustration|illustrated|vector|line art|watercolou?r|hand-?drawn|sketch|painterly|oil painting|acrylic|gouache|3d|rendered?|isometric|low-?poly|claymation|clay render|octane|abstract|geometric|gradient|pattern|flat (?:design|style|illustration)|anime|manga|pixel art|8-?bit|doodle|comic(?: style)?|surreal|futuristic|cyberpunk|steampunk|art deco|bauhaus|brutalist|scandinavian|boho|bohemian|grunge|neon|monochrome|black and white|sepia|film grain|matte|glossy)\b/gi,
+  color_specified: /\b(colou?r palette|colou?r scheme|monochrome|pastel|navy|gold accents?|warm tones?|cool tones?|gradient|palette|earth tones?|neutral tones?|teal|burgundy|emerald|coral|beige|charcoal|crimson|turquoise|lavender|mint green|olive|mustard|royal blue|deep blue|bright red|colou?rs?|tones?|hues?|shades?|(?:light|dark|deep|soft|bright|pale|muted|vibrant|sage|forest|sky|baby|hot|neon|dusty|rich) (?:blue|red|green|pink|purple|yellow|orange|grey|gray|brown|gold|violet|black|white)|black and gold|white and gold|rose gold|off-white|cream|ivory|indigo|maroon|magenta|cyan|amber|peach|lilac|khaki|tan|silver|golden)\b/gi,
+  composition_specified: /\b(composition|centered|negative space|white space|layout|balanced|symmetr(?:y|ical)|grid|hierarchy|framing|rule of thirds|top-down|bird'?s-eye|overhead|split-screen|full-bleed|margins?|alignment|aligned|corners?|borders?|spacing|padding|proportions?|foreground|left side|right side|upper (?:left|right)|lower (?:left|right)|vertical|horizontal|two-column|three-column|banner area|header area|footer area)\b/gi,
+  typography_specified: /\b(typography|typographic|fonts?|sans-serif|sans serif|serif|bold (?:text|typography|lettering)|text placement|legible|readable|headline|title text|lettering|script font|handwritten text|uppercase|lowercase|kerning|headings?|headers?|subheadings?|captions?|labels?|slogan|tagline|the words?|the text|reads? \"|title reading|font size|bold letters|large text|small text)\b/gi,
+  lighting_camera_specified: /\b(lighting|natural light(?:ing)?|studio lighting|close-?up|depth of field|camera|cinematic lighting|golden hour|backlit|soft lighting|dramatic lighting|rim light|bokeh|wide-angle|macro|shallow focus|50mm|35mm|dslr|low angle|high angle|eye level|shot on)\b/gi,
+  material_specified: /\b(glossy|matte|glass|metal(?:lic)?|fabric|textures?|textured|wood(?:en)?|marble|leather|linen|velvet|concrete|brushed steel|copper|brass|ceramic|paper texture|grainy)\b/gi,
+  spatial_relationship: /\b(next to|behind|in front of|surrounded by|on top of|between|beside|alongside|in the (?:center|centre|foreground|background|corner)|to the (?:left|right)|at the (?:top|bottom))\b/gi,
+  explicit_count: /\b((?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:people|persons?|items?|objects?|products?|icons?|elements?|characters?|figures?|panels?|slides?|columns?|rows?|sections?|pages?)|multiple|several|a pair of|trio of)\b/gi,
+  negative_constraint: /\b(without|no text|no words|avoid|excluding|no people|no humans?|do not|don'?t|free of|text-free|no watermark|no logo)\b/gi,
+  quality_expectation: /\b(high[- ]quality|high[- ]resolution|high-end|4k|8k|ultra hd|highly detailed|detailed|professional quality|print[- ]ready|crisp|sharp focus|ultra[- ]detailed)\b/gi,
+  aspect_ratio_specified: /\b(aspect ratio|16:9|4:3|1:1|9:16|3:2|portrait orientation|landscape orientation|square format|vertical format|horizontal format|\d{3,4}\s?[x×]\s?\d{3,4}\s?(?:px|pixels?)?)\b/gi,
+};
+const REQ_KINDS_ALL = Object.keys(REQ_LEX);
+function reqKindLabel(k){ return k==='style_specified' ? (currentLocale==='zh'?'风格':'Style') : T_control(k); }
+function highlightRequests(text, kinds){
+  kinds = kinds || REQ_KINDS_ALL;
+  let s = escapeHtml(text || '');
+  const spans = [];
+  kinds.forEach(k=>{ const re = new RegExp(REQ_LEX[k].source, 'gi'); let m; while((m = re.exec(s))){ if(m[0].length>1) spans.push([m.index, m.index+m[0].length, k]); if(re.lastIndex===m.index) re.lastIndex++; } });
+  spans.sort((a,b)=>a[0]-b[0] || (b[1]-b[0])-(a[1]-a[0]));
+  const merged = []; let lastEnd = -1;
+  for(const sp of spans){ if(sp[0] < lastEnd) continue; merged.push(sp); lastEnd = sp[1]; }
+  let out = '', pos = 0; const found = new Set();
+  for(const [a,b,k] of merged){ out += s.slice(pos,a) + `<mark class="req" title="${reqKindLabel(k)}">${s.slice(a,b)}</mark>`; pos = b; found.add(k); }
+  out += s.slice(pos);
+  return {html: out, kinds: Array.from(found)};
+}
+function highlightedExampleCard(e, kinds, extraLine){
+  const r = highlightRequests((e||'').slice(0,500), kinds);
+  const kl = r.kinds.length ? `<div class="req-kinds">${r.kinds.map(reqKindLabel).join(' · ')}</div>` : '';
+  return `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;">${extraLine||''}<span class="type-body-sm">"${r.html}"</span>${kl}</div>`;
+}
+function reqLegendHTML(kinds){
+  const note = currentLocale==='zh' ? '紫色加粗 = 从该 Prompt 中识别出的（关键词匹配，仅供参考）' : 'Purple bold = requests detected in each prompt (keyword-based, approximate):';
+  const what = (kinds && kinds.length===1 && kinds[0]==='style_specified') ? (currentLocale==='zh' ? '视觉风格词' : 'visual-style words') : (currentLocale==='zh' ? '具体要求（风格、颜色、排版、文字、光线、材质、位置、数量、禁止项、质量、画幅）' : 'explicit requests (style, colour, layout, text, lighting, material, placement, count, exclusions, quality, format)');
+  return `<div class="req-legend"><span><mark class="req">Aa</mark> ${note} ${what}</span></div>`;
+}
+
+function openExamplesDrawer(title, examples, hl){
   const S = L().scenarios;
   openSideSheet(`
     <div class="side-sheet-head">
@@ -2287,7 +2329,8 @@ function openExamplesDrawer(title, examples){
     </div>
     <div class="side-sheet-body">
       <div class="type-title-sm mb-2">${S.examplePrompts}</div>
-      ${(examples||[]).map(e=>`<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;"><span class="type-body-sm">"${(e||'').slice(0,300)}"</span></div>`).join('') || `<p class="type-body-sm on-surface-variant">—</p>`}
+      ${hl ? reqLegendHTML(hl) : ''}
+      ${(examples||[]).map(e=> hl ? highlightedExampleCard(e, hl) : `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;"><span class="type-body-sm">"${(e||'').slice(0,300)}"</span></div>`).join('') || `<p class="type-body-sm on-surface-variant">—</p>`}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
@@ -2491,7 +2534,8 @@ function openStyleDetail(name){
       <div class="kv-row"><span class="k">${S.subjectLbl}</span><span class="v">${(v.top_cats||[]).slice(0,3).map(c=>T_cat(c[0])).join(', ')||'—'}</span></div>
       <div class="kv-row"><span class="k">${S.controlLbl}</span><span class="v">${v.top_controls[0]?T_control(v.top_controls[0][0]):'—'}</span></div>
       <div class="type-title-sm mt-4 mb-2">${L().scenarios.examplePrompts}</div>
-      ${v.examples.map(e=>`<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;"><span class="type-body-sm">"${(e||'').slice(0,300)}"</span></div>`).join('')}
+      ${reqLegendHTML(['style_specified'])}
+      ${v.examples.map(e=>highlightedExampleCard(e, ['style_specified'])).join('')}
     </div>
   `);
   document.getElementById('closeSheet').addEventListener('click', closeSheets);
