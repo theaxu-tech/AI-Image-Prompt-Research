@@ -1464,7 +1464,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T06:51:31Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T07:23:33Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2875,9 +2875,20 @@ pageRenderers.promptset = function(container){
 };
 
 let testsetFilter = 'All';
+// ---- Test set: per-browser deletions (persisted), so the person can prune prompts they don't need ----
+const TS_DEL_KEY = 'testset_deleted_v1';
+function tsDeleted(){ try{ return new Set(JSON.parse(localStorage.getItem(TS_DEL_KEY)||'[]')); }catch(e){ return new Set(); } }
+function tsSaveDeleted(set){ try{ localStorage.setItem(TS_DEL_KEY, JSON.stringify(Array.from(set))); }catch(e){} }
+function activeTestset(){
+  const del = tsDeleted(); const out = {};
+  for(const [g, cats] of Object.entries(DATA.testset||{})){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){ out[g][c] = arr.filter(p=>!del.has(p)); } }
+  return out;
+}
 function renderTestSet(){
   const P = L().promptset;
-  const TS = DATA.testset || {};
+  const TS = activeTestset();
+  const nDeleted = tsDeleted().size;
+  const zh = currentLocale==='zh';
   const groups = GROUP_ORDER.filter(g => TS[g]);
   const total = groups.reduce((s,g)=>s+Object.values(TS[g]).reduce((a,arr)=>a+arr.length,0),0);
   const shown = testsetFilter==='All' ? groups : groups.filter(g=>g===testsetFilter);
@@ -2886,7 +2897,8 @@ function renderTestSet(){
       <div class="flex justify-between items-center mb-1" style="flex-wrap:wrap; gap:8px;">
         <h3 class="type-title-sm" style="margin:0;">${P.tsTitle}</h3>
         <div class="flex items-center gap-2">
-          <span class="type-label-sm on-surface-variant">${P.tsCount(total)}</span>
+          <span class="type-label-sm on-surface-variant">${P.tsCount(total)}${nDeleted?` · ${zh?`已删除 ${nDeleted} 条`:`${nDeleted} removed`}`:''}</span>
+          ${nDeleted?`<button class="btn btn-text" id="tsRestore" style="padding:0 8px;"><span class="msr sm">restart_alt</span>${zh?'恢复已删除':'Restore removed'}</button>`:''}
           <button class="btn btn-text" id="tsDownload" style="padding:0 8px;"><span class="msr sm">download</span>${P.tsDownload}</button>
         </div>
       </div>
@@ -2905,7 +2917,7 @@ function renderTestSet(){
                 <button class="btn btn-text ts-copy-all" data-g="${g}" data-cat="${cat}" style="padding:0 8px;"><span class="msr sm">content_copy</span>${P.tsCopyAll}</button>
               </div>
               <ol style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px;">
-                ${arr.map(p=>`<li class="type-body-sm" style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:1;">${escapeHtml(p)}</span><button class="icon-btn ts-copy" data-p="${escapeHtml(p)}" title="${P.tsCopy}" style="flex:none; width:28px; height:28px;"><span class="msr sm">content_copy</span></button></li>`).join('')}
+                ${arr.length ? arr.map(p=>`<li class="type-body-sm" style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:1;">${escapeHtml(p)}</span><button class="icon-btn ts-copy" data-p="${escapeHtml(p)}" title="${P.tsCopy}" style="flex:none; width:28px; height:28px;"><span class="msr sm">content_copy</span></button><button class="icon-btn ts-del" data-p="${escapeHtml(p)}" title="${zh?'删除这条':'Remove this prompt'}" style="flex:none; width:28px; height:28px; color:var(--md-on-surface-variant);"><span class="msr sm">close</span></button></li>`).join('') : `<li class="type-body-sm on-surface-variant" style="list-style:none; margin-left:-18px;">${zh?'该类目的示例已全部删除。':'All prompts in this category were removed.'}</li>`}
               </ol>
             </div></div>`).join('')}
         </div>`).join('')}
@@ -2917,11 +2929,18 @@ function wireTestSet(container){
   const card = container.querySelector('#testsetCard'); if(!card) return;
   const copy=async(text)=>{const ok=await copyToClipboard(text);showSnackbar(ok?P.tsCopied:L().share.linkCopyFailed);};
   card.querySelectorAll('.ts-copy').forEach(b=>b.addEventListener('click', ()=>copy(b.dataset.p)));
-  card.querySelectorAll('.ts-copy-all').forEach(b=>b.addEventListener('click', ()=>copy((DATA.testset[b.dataset.g][b.dataset.cat]||[]).join('\n'))));
+  card.querySelectorAll('.ts-copy-all').forEach(b=>b.addEventListener('click', ()=>copy(((activeTestset()[b.dataset.g]||{})[b.dataset.cat]||[]).join('\n'))));
+  card.querySelectorAll('.ts-del').forEach(b=>b.addEventListener('click', ()=>{
+    const set = tsDeleted(); set.add(b.dataset.p); tsSaveDeleted(set);
+    pageRenderers.promptset(container);
+    showSnackbar(currentLocale==='zh'?'已删除（仅保存在本浏览器）':'Removed (saved in this browser only)', currentLocale==='zh'?'撤销':'Undo', ()=>{ const s=tsDeleted(); s.delete(b.dataset.p); tsSaveDeleted(s); pageRenderers.promptset(container); });
+  }));
+  const rs = card.querySelector('#tsRestore');
+  if(rs) rs.addEventListener('click', ()=>{ tsSaveDeleted(new Set()); pageRenderers.promptset(container); });
   card.querySelectorAll('#tsChips .chip').forEach(ch=>ch.addEventListener('click', ()=>{ testsetFilter = ch.dataset.g; pageRenderers.promptset(container); }));
   const dl = card.querySelector('#tsDownload');
   if(dl) dl.addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(DATA.testset, null, 2)], {type:'application/json'});
+    const blob = new Blob([JSON.stringify(activeTestset(), null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ai-image-prompt-testset.json'; document.body.appendChild(a); a.click(); a.remove();
   });
 }
