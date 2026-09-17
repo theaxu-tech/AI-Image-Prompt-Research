@@ -1465,7 +1465,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T08:09:21Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T08:16:16Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2907,6 +2907,7 @@ function renderTestSet(){
           <span class="type-label-sm on-surface-variant">${P.tsCount(total)}${nDeleted?` · ${zh?`已删除 ${nDeleted} 条`:`${nDeleted} removed`}`:''}${tsAddedCount()?` · ${zh?`新增 ${tsAddedCount()} 条`:`${tsAddedCount()} added`}`:''}</span>
           ${nDeleted?`<button class="btn btn-text" id="tsRestore" style="padding:0 8px;"><span class="msr sm">restart_alt</span>${zh?'恢复已删除':'Restore removed'}</button>`:''}
           <button class="btn btn-text" id="tsDownload" style="padding:0 8px;"><span class="msr sm">download</span>${P.tsDownload}</button>
+          <button class="btn btn-tonal" id="tsExportChanges" style="height:32px; padding:0 12px;" title="${zh?'把本浏览器里的删除、新增和各页总结编辑打包导出，发给维护者即可同步为默认版本':'Bundle this browser\'s deletions, additions and summary edits into one file to send to the maintainer'}"><span class="msr sm">upload_file</span>${zh?'导出我的全部修改':'Export my changes'}</button>
         </div>
       </div>
       <p class="type-body-sm on-surface-variant mb-3">${P.tsSub}</p>
@@ -2962,6 +2963,15 @@ function wireTestSet(container){
     pageRenderers.promptset(container);
     showSnackbar(currentLocale==='zh'?'已删除（仅保存在本浏览器）':'Removed (saved in this browser only)', currentLocale==='zh'?'撤销':'Undo', ()=>{ const s=tsDeleted(); s.delete(b.dataset.p); tsSaveDeleted(s); pageRenderers.promptset(container); });
   }));
+  const ex = card.querySelector('#tsExportChanges');
+  if(ex) ex.addEventListener('click', ()=>{
+    const notes = {};
+    try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.startsWith('designer_note_')) notes[k.replace('designer_note_','')] = localStorage.getItem(k); } }catch(e){}
+    const bundle = { exported_at: new Date().toISOString(), report_version: LAST_PUSH_TIMESTAMP, testset_deleted: Array.from(tsDeleted()), testset_added: tsAdded(), designer_notes_edited: notes, active_testset: activeTestset() };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'my-report-changes.json'; document.body.appendChild(a); a.click(); a.remove();
+    showSnackbar(currentLocale==='zh'?'已导出 my-report-changes.json，发给维护者即可同步':'Exported my-report-changes.json — send it to the maintainer to sync');
+  });
   const rs = card.querySelector('#tsRestore');
   if(rs) rs.addEventListener('click', ()=>{ tsSaveDeleted(new Set()); pageRenderers.promptset(container); });
   card.querySelectorAll('#tsChips .chip').forEach(ch=>ch.addEventListener('click', ()=>{ testsetFilter = ch.dataset.g; pageRenderers.promptset(container); }));
