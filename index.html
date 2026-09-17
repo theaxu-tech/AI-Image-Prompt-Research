@@ -119,7 +119,14 @@ h1,h2,h3,h4,h5,p{margin:0;}
 .designer-note .dn-body .dn-note{ font-size:12.5px; color:var(--md-on-surface-variant); border-top:1px dashed var(--md-outline-variant); padding-top:8px; margin-top:8px; }
 .designer-note .dn-body[contenteditable="true"]{ outline:2px solid var(--md-primary); outline-offset:6px; border-radius:6px; background:var(--md-surface-container-lowest, transparent); }
 .designer-note .dn-edited{ font-size:11px; color:var(--md-on-surface-variant); }
+:root{ --rq-style:#6750A4; --rq-color:#C2185B; --rq-comp:#1565C0; --rq-typo:#00796B; --rq-light:#E65100; --rq-mat:#6D4C41; --rq-spat:#2E7D32; --rq-count:#B26A00; --rq-neg:#C62828; --rq-qual:#455A64; --rq-ar:#3949AB; }
+[data-theme="dark"]{ --rq-style:#CFBCFF; --rq-color:#F48FB1; --rq-comp:#90CAF9; --rq-typo:#80CBC4; --rq-light:#FFAB91; --rq-mat:#BCAAA4; --rq-spat:#A5D6A7; --rq-count:#FFD54F; --rq-neg:#EF9A9A; --rq-qual:#B0BEC5; --rq-ar:#9FA8DA; }
 .req{ color:var(--md-primary); font-weight:700; background:transparent; }
+.req-k-style_specified{ color:var(--rq-style); } .req-k-color_specified{ color:var(--rq-color); } .req-k-composition_specified{ color:var(--rq-comp); }
+.req-k-typography_specified{ color:var(--rq-typo); } .req-k-lighting_camera_specified{ color:var(--rq-light); } .req-k-material_specified{ color:var(--rq-mat); }
+.req-k-spatial_relationship{ color:var(--rq-spat); } .req-k-explicit_count{ color:var(--rq-count); } .req-k-negative_constraint{ color:var(--rq-neg); }
+.req-k-quality_expectation{ color:var(--rq-qual); } .req-k-aspect_ratio_specified{ color:var(--rq-ar); }
+.req-legend-item{ display:inline-flex; align-items:center; gap:4px; }
 .req-legend{ display:flex; flex-wrap:wrap; gap:6px 12px; margin:0 0 10px; }
 .req-legend span{ font-size:12px; color:var(--md-on-surface-variant); }
 .req-kinds{ margin-top:6px; font-size:11.5px; color:var(--md-on-surface-variant); }
@@ -1459,7 +1466,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T05:27:47Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T05:55:41Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2318,7 +2325,7 @@ function highlightRequests(text, kinds){
   const merged = []; let lastEnd = -1;
   for(const sp of spans){ if(sp[0] < lastEnd) continue; merged.push(sp); lastEnd = sp[1]; }
   let out = '', pos = 0; const found = new Set();
-  for(const [a,b,k] of merged){ out += s.slice(pos,a) + `<mark class="req" title="${reqKindLabel(k)}">${s.slice(a,b)}</mark>`; pos = b; found.add(k); }
+  for(const [a,b,k] of merged){ out += s.slice(pos,a) + `<mark class="req req-k-${k}" title="${reqKindLabel(k)}">${s.slice(a,b)}</mark>`; pos = b; found.add(k); }
   out += s.slice(pos);
   return {html: out, kinds: Array.from(found)};
 }
@@ -2344,7 +2351,7 @@ function exampleCard(e, idx, opts){
   opts = opts || {};
   const text = e || '';
   const body = opts.hl ? highlightRequests(text, opts.hl) : {html: escapeHtml(text), kinds: []};
-  const kl = body.kinds.length ? `<div class="req-kinds">${body.kinds.map(reqKindLabel).join(' · ')}</div>` : '';
+  const kl = body.kinds.length ? `<div class="req-kinds">${body.kinds.map(k=>`<span class="req req-k-${k}" style="font-weight:600;">${reqKindLabel(k)}</span>`).join(' · ')}</div>` : '';
   return `<div class="cluster-card" style="padding:14px 16px; margin-bottom:8px;">${exampleHeader(idx, text, opts.words)}<span class="type-body-sm" style="white-space:pre-wrap;">${body.html}</span>${kl}</div>`;
 }
 function highlightedExampleCard(e, kinds, extraLine, idx, words){
@@ -2353,7 +2360,10 @@ function highlightedExampleCard(e, kinds, extraLine, idx, words){
 function reqLegendHTML(kinds){
   const note = currentLocale==='zh' ? '紫色加粗 = 从该 Prompt 中识别出的（关键词匹配，仅供参考）' : 'Purple bold = requests detected in each prompt (keyword-based, approximate):';
   const what = (kinds && kinds.length===1 && kinds[0]==='style_specified') ? (currentLocale==='zh' ? '视觉风格词' : 'visual-style words') : (currentLocale==='zh' ? '具体要求（风格、颜色、排版、文字、光线、材质、位置、数量、禁止项、质量、画幅）' : 'explicit requests (style, colour, layout, text, lighting, material, placement, count, exclusions, quality, format)');
-  return `<div class="req-legend"><span><mark class="req">Aa</mark> ${note} ${what}</span></div>`;
+  const ks = (kinds && kinds.length) ? kinds : REQ_KINDS_ALL;
+  const chips = ks.map(k=>`<span class="req-legend-item"><mark class="req req-k-${k}">Aa</mark>${reqKindLabel(k)}</span>`).join('');
+  const lead = currentLocale==='zh' ? '加粗彩色 = 从该 Prompt 中识别出的具体要求（关键词匹配，仅供参考），每种颜色对应一类：' : 'Bold colour = requests detected in each prompt (keyword-based, approximate); one colour per type:';
+  return `<div class="req-legend"><span style="flex-basis:100%;">${lead}</span>${chips}</div>`;
 }
 
 // ---- Designer's summary (editable, persisted per page & language in this browser) ----
