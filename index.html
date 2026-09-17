@@ -1465,7 +1465,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T07:26:18Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T07:31:21Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2880,11 +2880,17 @@ let testsetFilter = 'All';
 const TS_DEL_KEY = 'testset_deleted_v1';
 function tsDeleted(){ try{ return new Set(JSON.parse(localStorage.getItem(TS_DEL_KEY)||'[]')); }catch(e){ return new Set(); } }
 function tsSaveDeleted(set){ try{ localStorage.setItem(TS_DEL_KEY, JSON.stringify(Array.from(set))); }catch(e){} }
+const TS_ADD_KEY = 'testset_added_v1';
+function tsAdded(){ try{ return JSON.parse(localStorage.getItem(TS_ADD_KEY)||'{}'); }catch(e){ return {}; } }
+function tsSaveAdded(obj){ try{ localStorage.setItem(TS_ADD_KEY, JSON.stringify(obj)); }catch(e){} }
+function tsAddedCount(){ return Object.values(tsAdded()).reduce((s,cats)=>s+Object.values(cats).reduce((a,arr)=>a+arr.length,0),0); }
 function activeTestset(){
-  const del = tsDeleted(); const out = {};
-  for(const [g, cats] of Object.entries(DATA.testset||{})){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){ out[g][c] = arr.filter(p=>!del.has(p)); } }
+  const del = tsDeleted(); const add = tsAdded(); const out = {};
+  for(const [g, cats] of Object.entries(DATA.testset||{})){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){ out[g][c] = arr.filter(p=>!del.has(p)).concat((add[g]||{})[c]||[]); } }
   return out;
 }
+function tsIsCustom(g, c, p){ return (((tsAdded()[g]||{})[c])||[]).includes(p); }
+let tsAddingKey = null;   // "group||cat" whose add form is open
 function renderTestSet(){
   const P = L().promptset;
   const TS = activeTestset();
@@ -2898,7 +2904,7 @@ function renderTestSet(){
       <div class="flex justify-between items-center mb-1" style="flex-wrap:wrap; gap:8px;">
         <h3 class="type-title-sm" style="margin:0;">${P.tsTitle}</h3>
         <div class="flex items-center gap-2">
-          <span class="type-label-sm on-surface-variant">${P.tsCount(total)}${nDeleted?` · ${zh?`已删除 ${nDeleted} 条`:`${nDeleted} removed`}`:''}</span>
+          <span class="type-label-sm on-surface-variant">${P.tsCount(total)}${nDeleted?` · ${zh?`已删除 ${nDeleted} 条`:`${nDeleted} removed`}`:''}${tsAddedCount()?` · ${zh?`新增 ${tsAddedCount()} 条`:`${tsAddedCount()} added`}`:''}</span>
           ${nDeleted?`<button class="btn btn-text" id="tsRestore" style="padding:0 8px;"><span class="msr sm">restart_alt</span>${zh?'恢复已删除':'Restore removed'}</button>`:''}
           <button class="btn btn-text" id="tsDownload" style="padding:0 8px;"><span class="msr sm">download</span>${P.tsDownload}</button>
         </div>
@@ -2915,10 +2921,20 @@ function renderTestSet(){
             <div class="g-span-6"><div class="card-flat" style="border-left:4px solid ${groupColor(g)}; height:100%;">
               <div class="flex justify-between items-center mb-2">
                 <span class="type-title-sm">${T_cat(cat)}</span>
-                <button class="btn btn-text ts-copy-all" data-g="${g}" data-cat="${cat}" style="padding:0 8px;"><span class="msr sm">content_copy</span>${P.tsCopyAll}</button>
+                <span class="flex items-center gap-1">
+                  <button class="btn btn-text ts-add" data-g="${g}" data-cat="${cat}" style="padding:0 8px;"><span class="msr sm">add</span>${zh?'新增':'Add'}</button>
+                  <button class="btn btn-text ts-copy-all" data-g="${g}" data-cat="${cat}" style="padding:0 8px;"><span class="msr sm">content_copy</span>${P.tsCopyAll}</button>
+                </span>
               </div>
+              ${tsAddingKey===g+'||'+cat ? `<div class="mb-2 ts-add-form" data-g="${g}" data-cat="${cat}">
+                <textarea class="ts-add-input" rows="3" placeholder="${zh?'输入一条新的 prompt…':'Type a new prompt…'}" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px; border:1px solid var(--md-outline-variant); background:var(--md-surface); color:var(--md-on-surface); font:inherit; font-size:14px; resize:vertical;"></textarea>
+                <div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;">
+                  <button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button>
+                  <button class="btn btn-filled ts-add-save" style="height:32px; padding:0 12px;"><span class="msr sm">check</span>${zh?'保存':'Save'}</button>
+                </div>
+              </div>` : ''}
               <ol style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px;">
-                ${arr.length ? arr.map(p=>`<li class="type-body-sm" style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:1;">${escapeHtml(p)}</span><button class="icon-btn ts-copy" data-p="${escapeHtml(p)}" title="${P.tsCopy}" style="flex:none; width:28px; height:28px;"><span class="msr sm">content_copy</span></button><button class="icon-btn ts-del" data-p="${escapeHtml(p)}" title="${zh?'删除这条':'Remove this prompt'}" style="flex:none; width:28px; height:28px; color:var(--md-on-surface-variant);"><span class="msr sm">close</span></button></li>`).join('') : `<li class="type-body-sm on-surface-variant" style="list-style:none; margin-left:-18px;">${zh?'该类目的示例已全部删除。':'All prompts in this category were removed.'}</li>`}
+                ${arr.length ? arr.map(p=>`<li class="type-body-sm" style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:1;">${escapeHtml(p)}${tsIsCustom(g,cat,p)?` <span class="type-label-sm" style="color:var(--md-primary); margin-left:6px;">${zh?'自定义':'custom'}</span>`:''}</span><button class="icon-btn ts-copy" data-p="${escapeHtml(p)}" title="${P.tsCopy}" style="flex:none; width:28px; height:28px;"><span class="msr sm">content_copy</span></button><button class="icon-btn ts-del" data-p="${escapeHtml(p)}" title="${zh?'删除这条':'Remove this prompt'}" style="flex:none; width:28px; height:28px; color:var(--md-on-surface-variant);"><span class="msr sm">close</span></button></li>`).join('') : `<li class="type-body-sm on-surface-variant" style="list-style:none; margin-left:-18px;">${zh?'该类目的示例已全部删除。':'All prompts in this category were removed.'}</li>`}
               </ol>
             </div></div>`).join('')}
         </div>`).join('')}
@@ -2931,7 +2947,17 @@ function wireTestSet(container){
   const copy=async(text)=>{const ok=await copyToClipboard(text);showSnackbar(ok?P.tsCopied:L().share.linkCopyFailed);};
   card.querySelectorAll('.ts-copy').forEach(b=>b.addEventListener('click', ()=>copy(b.dataset.p)));
   card.querySelectorAll('.ts-copy-all').forEach(b=>b.addEventListener('click', ()=>copy(((activeTestset()[b.dataset.g]||{})[b.dataset.cat]||[]).join('\n'))));
+  card.querySelectorAll('.ts-add').forEach(b=>b.addEventListener('click', ()=>{ tsAddingKey = b.dataset.g+'||'+b.dataset.cat; pageRenderers.promptset(container); const ta=container.querySelector('.ts-add-input'); if(ta){ ta.focus(); ta.scrollIntoView({block:'center'}); } }));
+  card.querySelectorAll('.ts-add-cancel').forEach(b=>b.addEventListener('click', ()=>{ tsAddingKey = null; pageRenderers.promptset(container); }));
+  card.querySelectorAll('.ts-add-save').forEach(b=>b.addEventListener('click', ()=>{
+    const form = b.closest('.ts-add-form'); const text = (form.querySelector('.ts-add-input').value||'').trim(); if(!text) return;
+    const add = tsAdded(); add[form.dataset.g] = add[form.dataset.g]||{}; add[form.dataset.g][form.dataset.cat] = (add[form.dataset.g][form.dataset.cat]||[]).concat([text]); tsSaveAdded(add);
+    tsAddingKey = null; pageRenderers.promptset(container);
+    showSnackbar(currentLocale==='zh'?'已新增（仅保存在本浏览器）':'Added (saved in this browser only)');
+  }));
   card.querySelectorAll('.ts-del').forEach(b=>b.addEventListener('click', ()=>{
+    const li = b.closest('li'); const cardEl = b.closest('.card-flat'); const g = cardEl.querySelector('.ts-copy-all').dataset.g, c = cardEl.querySelector('.ts-copy-all').dataset.cat;
+    if(tsIsCustom(g,c,b.dataset.p)){ const add = tsAdded(); add[g][c] = add[g][c].filter(x=>x!==b.dataset.p); tsSaveAdded(add); pageRenderers.promptset(container); return; }
     const set = tsDeleted(); set.add(b.dataset.p); tsSaveDeleted(set);
     pageRenderers.promptset(container);
     showSnackbar(currentLocale==='zh'?'已删除（仅保存在本浏览器）':'Removed (saved in this browser only)', currentLocale==='zh'?'撤销':'Undo', ()=>{ const s=tsDeleted(); s.delete(b.dataset.p); tsSaveDeleted(s); pageRenderers.promptset(container); });
