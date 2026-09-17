@@ -1471,7 +1471,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T11:50:23Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T12:18:00Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2980,11 +2980,24 @@ function tsSaveCustomCats(o){ try{ localStorage.setItem(TS_CATS_KEY, JSON.string
 function tsIsCustomCat(g, c){ return ((tsCustomCats()[g])||[]).includes(c); }
 function tsIsBakedCustomCat(g, c){ return (((DATA.testset_custom_default||{})[g])||[]).includes(c); }
 let tsNamingGroup = null;   // group whose "new card" form is open
+function tsSanitizeLocal(){
+  // additions and custom cards that have since been baked into the defaults must not show twice
+  const defaults = new Set(); for(const cats of Object.values(DATA.testset||{})) for(const arr of Object.values(cats)) arr.forEach(p=>defaults.add(p));
+  const add = tsAdded(); let changed = false;
+  for(const g of Object.keys(add)){ for(const c of Object.keys(add[g])){ const kept = add[g][c].filter(p=>!defaults.has(p)); if(kept.length!==add[g][c].length){ changed = true; add[g][c] = kept; } if(!add[g][c].length) delete add[g][c]; } if(!Object.keys(add[g]).length) delete add[g]; }
+  if(changed) tsSaveAdded(add);
+  const cc = tsCustomCats(); let ccChanged = false;
+  for(const g of Object.keys(cc)){ const kept = cc[g].filter(c=>!((DATA.testset||{})[g]||{}).hasOwnProperty(c)); if(kept.length!==cc[g].length){ ccChanged = true; cc[g] = kept; } if(!cc[g].length) delete cc[g]; }
+  if(ccChanged) tsSaveCustomCats(cc);
+  const del = tsDeleted(); const keptDel = new Set(Array.from(del).filter(p=>defaults.has(p))); if(keptDel.size!==del.size) tsSaveDeleted(keptDel);   // stale deletions of prompts no longer in defaults
+}
+function tsMerge(base, extra){ const seen = new Set(base); const out = base.slice(); for(const p of (extra||[])){ if(!seen.has(p)){ seen.add(p); out.push(p); } } return out; }
 function activeTestset(){
+  tsSanitizeLocal();
   const del = tsDeleted(); const add = tsAdded(); const cc = tsCustomCats(); const out = {};
   for(const [g, cats] of Object.entries(DATA.testset||{})){
-    out[g] = {}; for(const [c, arr] of Object.entries(cats)){ out[g][c] = arr.filter(p=>!del.has(p)).concat((add[g]||{})[c]||[]); }
-    for(const c of (cc[g]||[])){ if(!(c in out[g])) out[g][c] = ((add[g]||{})[c])||[]; }
+    out[g] = {}; for(const [c, arr] of Object.entries(cats)){ out[g][c] = tsMerge(arr.filter(p=>!del.has(p)), (add[g]||{})[c]); }
+    for(const c of (cc[g]||[])){ if(!(c in out[g])) out[g][c] = tsMerge([], (add[g]||{})[c]); }
   }
   return out;
 }
@@ -2999,12 +3012,11 @@ function tsSourceKey(text){ const s = tsMeta()[text] || (DATA.testset_sources||{
 function tsSourceLabel(text){ const s = tsSourceKey(text); const zh = currentLocale==='zh'; return s==='user' ? (zh?'用户真实请求':'real user request') : s==='popular' ? (zh?'社区常见写法':'community phrasing') : (zh?'设计师手写':'designer-written'); }
 function activeTestsetTyped(){
   const del = tsDeleted(); const add = tsAdded(); const out = {};
-  const cc = tsCustomCats();
-  for(const [g, cats] of Object.entries(DATA.testset||{})){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){
-    out[g][c] = arr.filter(p=>!del.has(p)).map(p=>({text:p, source:(DATA.testset_sources||{})[p]||'default'})).concat((((add[g]||{})[c])||[]).map(p=>({text:p, source:tsSourceKey(p)})));
-  }
-    for(const c of (cc[g]||[])){ if(!(c in out[g])) out[g][c] = ((((add[g]||{})[c])||[]).map(p=>({text:p, source:tsSourceKey(p), custom_category:true}))); }
-  }
+  const cc = tsCustomCats(); const act = activeTestset();
+  for(const [g, cats] of Object.entries(act)){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){
+    const custom = !((DATA.testset||{})[g]||{}).hasOwnProperty(c) || tsIsBakedCustomCat(g,c);
+    out[g][c] = arr.map(p=>({text:p, source:(DATA.testset_sources||{})[p] || (tsIsCustom(g,c,p) ? tsSourceKey(p) : 'default'), ...(custom?{custom_category:true}:{})}));
+  } }
   return out;
 }
 function tsCandidates(g, cat, mode){
