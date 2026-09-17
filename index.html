@@ -1465,7 +1465,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T10:23:16Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T10:23:49Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -3061,7 +3061,7 @@ T_control=function(k){return k.includes(' + ')?k.split(' + ').map(controlLabelBe
 for(const lang of ['zh','en']){
  const zh=lang==='zh';I18N[lang].scenarios.examplePrompts=zh?'Prompt 示例':'Prompt examples';
  I18N[lang].promptset.tsTitle=zh?'分类测试集 · 原始数据精选':'Category test set · selected source prompts';
- I18N[lang].promptset.tsSub=zh?'59 个类目，共 374 条完整原始 Prompt，每类最多 8 条，兼顾简短请求和长篇详细需求。按源词数排序；类目依据目标成品和主要主体判断。':'374 complete source prompts across 59 categories, up to eight per category, spanning shorter requests and detailed briefs. Ordered by source word count and classified by intended artefact and primary subject.';
+ I18N[lang].promptset.tsSub=zh?'59 个类目中 58 个有样本，共 175 条完整原始 Prompt（经人工筛减），兼顾简短请求和长篇详细需求。按源词数排序；类目依据目标成品和主要主体判断。':'175 complete source prompts across 58 of the 59 categories after manual pruning, mixing short requests and long briefs. Ordered by source word count and classified by intended artefact and primary subject.';
  I18N[lang].promptset.tsCopyAll=zh?'复制本组':'Copy category';
  I18N[lang].styles.mostCommonTriple=zh?'各维度高频项（分别统计）':'Leading values by dimension (counted separately)';
 }
