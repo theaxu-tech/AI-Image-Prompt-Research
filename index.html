@@ -1465,7 +1465,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T10:23:49Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T10:25:40Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2896,7 +2896,15 @@ let tsAddIdx = 0;         // candidate cursor for auto / popular
 const TS_META_KEY = 'testset_added_meta_v1';
 function tsMeta(){ try{ return JSON.parse(localStorage.getItem(TS_META_KEY)||'{}'); }catch(e){ return {}; } }
 function tsSaveMeta(o){ try{ localStorage.setItem(TS_META_KEY, JSON.stringify(o)); }catch(e){} }
-function tsSourceLabel(text){ const s = tsMeta()[text]||'manual'; const zh = currentLocale==='zh'; return s==='auto' ? (zh?'自动补选':'auto-picked') : s==='popular' ? (zh?'常见写法':'common phrasing') : (zh?'设计师手写':'designer-written'); }
+function tsSourceKey(text){ const s = tsMeta()[text]||'manual'; return s==='auto' ? 'user' : s; }
+function tsSourceLabel(text){ const s = tsSourceKey(text); const zh = currentLocale==='zh'; return s==='user' ? (zh?'用户真实请求':'real user request') : s==='popular' ? (zh?'社区常见写法':'community phrasing') : (zh?'设计师手写':'designer-written'); }
+function activeTestsetTyped(){
+  const del = tsDeleted(); const add = tsAdded(); const out = {};
+  for(const [g, cats] of Object.entries(DATA.testset||{})){ out[g] = {}; for(const [c, arr] of Object.entries(cats)){
+    out[g][c] = arr.filter(p=>!del.has(p)).map(p=>({text:p, source:'default'})).concat((((add[g]||{})[c])||[]).map(p=>({text:p, source:tsSourceKey(p)})));
+  } }
+  return out;
+}
 function tsCandidates(g, cat, mode){
   const pool = (DATA.testset_pool||{})[mode]||{}; const arr = ((pool[g]||{})[cat])||[]; const have = new Set(((activeTestset()[g]||{})[cat])||[]);
   return arr.map(x => typeof x==='string' ? {text:x} : x).filter(x=>!have.has(x.text));
@@ -2904,29 +2912,31 @@ function tsCandidates(g, cat, mode){
 function tsAddPanel(g, cat){
   const zh = currentLocale==='zh';
   const opt = (mode, icon, label, hint) => `<button class="chip ts-add-mode ${tsAddMode===mode?'active':''}" data-mode="${mode}" title="${hint}"><span class="msr sm" style="margin-right:4px;">${icon}</span>${label}</button>`;
+  const ta = (ph) => `<textarea class="ts-add-input" rows="3" placeholder="${ph}" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px; border:1px solid var(--md-outline-variant); background:var(--md-surface); color:var(--md-on-surface); font:inherit; font-size:14px; resize:vertical;"></textarea>`;
+  const actions = (mode) => `<div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button><button class="btn btn-filled ts-add-save" data-mode="${mode}" style="height:32px; padding:0 12px;"><span class="msr sm">check</span>${zh?'保存':'Save'}</button></div>`;
   let body = '';
-  if(tsAddMode==='manual'){
-    body = `<textarea class="ts-add-input" rows="3" placeholder="${zh?'输入一条新的 prompt…':'Type a new prompt…'}" style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px; border:1px solid var(--md-outline-variant); background:var(--md-surface); color:var(--md-on-surface); font:inherit; font-size:14px; resize:vertical;"></textarea>
-      <div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button><button class="btn btn-filled ts-add-save" data-mode="manual" style="height:32px; padding:0 12px;"><span class="msr sm">check</span>${zh?'保存':'Save'}</button></div>`;
-  } else if(tsAddMode==='auto' || tsAddMode==='popular'){
-    const cands = tsCandidates(g, cat, tsAddMode);
-    if(!cands.length){ body = `<p class="type-body-sm on-surface-variant" style="margin:6px 0;">${zh?'该类目暂无可补选的候选。':'No further candidates for this category.'}</p><div class="flex" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'关闭':'Close'}</button></div>`; }
-    else {
-      const c = cands[tsAddIdx % cands.length];
-      const tag = tsAddMode==='auto' ? (zh?'来自真实用户请求 · 已通过该类目筛选规则':'Real user request · passes this category\'s filters') : (zh?`常见写法 · 该开头在此类目出现 ${c.n} 次`:`Common phrasing · this opening appears ${c.n}× in the category`);
-      body = `<div class="cluster-card" style="padding:12px 14px;"><div class="type-label-sm on-surface-variant mb-1">${tag} · ${tsAddIdx % cands.length + 1}/${cands.length}</div><div class="type-body-sm ts-cand-text" style="white-space:pre-wrap;">${escapeHtml(c.text)}</div></div>
-      <div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button><button class="btn btn-text ts-add-next" style="padding:0 8px;"><span class="msr sm">refresh</span>${zh?'换一条':'Another'}</button><button class="btn btn-filled ts-add-save" data-mode="${tsAddMode}" data-text="${escapeHtml(c.text)}" style="height:32px; padding:0 12px;"><span class="msr sm">add</span>${zh?'加入':'Add'}</button></div>`;
-    }
+  if(tsAddMode==='user'){
+    const cands = tsCandidates(g, cat, 'auto'); let helper = '';
+    if(cands.length){ const c = cands[tsAddIdx % cands.length];
+      helper = `<div class="cluster-card" style="padding:10px 12px; margin-bottom:8px;"><div class="type-label-sm on-surface-variant mb-1">${zh?'自动补选（按本类目规则从 150 万条中筛出，尚未收录）':'Auto-pick (rule-filtered from 1.5M, not yet in the set)'} · ${tsAddIdx % cands.length + 1}/${cands.length}</div><div class="type-body-sm ts-cand-text" style="white-space:pre-wrap;">${escapeHtml(c.text)}</div>
+        <div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;"><button class="btn btn-text ts-add-next" style="padding:0 8px;"><span class="msr sm">refresh</span>${zh?'换一条':'Another'}</button><button class="btn btn-text ts-add-fill" data-text="${escapeHtml(c.text)}" style="padding:0 8px;"><span class="msr sm">arrow_downward</span>${zh?'填入下方':'Use this'}</button></div></div>`; }
+    body = helper + ta(zh?'粘贴或输入一条真实用户请求…':'Paste or type a real user request…') + actions('user');
+  } else if(tsAddMode==='popular'){
+    body = ta(zh?'输入一条社区常见写法的 prompt…':'Type a prompt in common community phrasing…') + actions('popular');
+  } else if(tsAddMode==='manual'){
+    body = ta(zh?'输入一条设计师手写的 prompt…':'Type a designer-written prompt…') + actions('manual');
   }
   return `<div class="mb-2 ts-add-form" data-g="${g}" data-cat="${cat}">
+    <div class="type-label-sm on-surface-variant mb-1">${zh?'选择 prompt 类型（导出时以此区分）':'Choose the prompt type (used to tag exports)'}</div>
     <div class="chip-row mb-2" style="flex-wrap:wrap;">
-      ${opt('auto','auto_awesome', zh?'自动补选真实请求':'Auto-pick a user request', zh?'从 150 万条中按本类目规则筛出的、尚未收录的用户请求':'Rule-filtered real requests not yet in the set')}
-      ${opt('popular','trending_up', zh?'常见写法':'Common phrasing', zh?'本类目里开头句式重复最多的用户请求（以写法重复次数代表热度）':'Requests with the most frequently repeated openings in this category (frequency as a proxy for popularity)')}
-      ${opt('manual','edit', zh?'设计师手写':'Write my own', zh?'手动输入一条 prompt':'Type a prompt yourself')}
+      ${opt('user','person', zh?'用户真实请求':'Real user request', zh?'来自真实用户的请求，可自动补选或手动粘贴':'A real user request — auto-pick or paste')}
+      ${opt('popular','trending_up', zh?'社区常见写法':'Community phrasing', zh?'社区里流行、常见的写法':'Popular phrasing seen in the community')}
+      ${opt('manual','edit', zh?'设计师手写':'Designer-written', zh?'设计师撰写的高质量 prompt':'High-quality prompt written by a designer')}
     </div>
     ${body || `<div class="flex" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button></div>`}
   </div>`;
 }
+
 function renderTestSet(){
   const P = L().promptset;
   const TS = activeTestset();
@@ -2981,13 +2991,14 @@ function wireTestSet(container){
   card.querySelectorAll('.ts-add').forEach(b=>b.addEventListener('click', ()=>{ tsAddingKey = b.dataset.g+'||'+b.dataset.cat; tsAddMode='menu'; tsAddIdx=0; pageRenderers.promptset(container); const f=container.querySelector('.ts-add-form'); if(f) f.scrollIntoView({block:'center'}); }));
   card.querySelectorAll('.ts-add-mode').forEach(b=>b.addEventListener('click', ()=>{ tsAddMode = b.dataset.mode; tsAddIdx = 0; pageRenderers.promptset(container); const ta=container.querySelector('.ts-add-input'); if(ta) ta.focus(); }));
   card.querySelectorAll('.ts-add-next').forEach(b=>b.addEventListener('click', ()=>{ tsAddIdx++; pageRenderers.promptset(container); }));
+  card.querySelectorAll('.ts-add-fill').forEach(b=>b.addEventListener('click', ()=>{ const ta=b.closest('.ts-add-form').querySelector('.ts-add-input'); if(ta){ ta.value = b.dataset.text; ta.focus(); } }));
   card.querySelectorAll('.ts-add-cancel').forEach(b=>b.addEventListener('click', ()=>{ tsAddingKey = null; pageRenderers.promptset(container); }));
   card.querySelectorAll('.ts-add-save').forEach(b=>b.addEventListener('click', ()=>{
     const form = b.closest('.ts-add-form'); const mode = b.dataset.mode||'manual';
-    const text = mode==='manual' ? (form.querySelector('.ts-add-input').value||'').trim() : (b.dataset.text||''); if(!text) return;
+    const text = (form.querySelector('.ts-add-input').value||'').trim(); if(!text) return;
     const add = tsAdded(); add[form.dataset.g] = add[form.dataset.g]||{}; add[form.dataset.g][form.dataset.cat] = (add[form.dataset.g][form.dataset.cat]||[]).concat([text]); tsSaveAdded(add);
     const meta = tsMeta(); meta[text] = mode; tsSaveMeta(meta);
-    if(mode==='manual'){ tsAddingKey = null; } else { tsAddIdx = 0; }   // keep the picker open so several candidates can be added in a row
+    tsAddingKey = null;
     pageRenderers.promptset(container);
     showSnackbar(currentLocale==='zh'?'已新增（仅保存在本浏览器）':'Added (saved in this browser only)');
   }));
@@ -3002,7 +3013,7 @@ function wireTestSet(container){
   if(ex) ex.addEventListener('click', ()=>{
     const notes = {};
     try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.startsWith('designer_note_')) notes[k.replace('designer_note_','')] = localStorage.getItem(k); } }catch(e){}
-    const bundle = { exported_at: new Date().toISOString(), report_version: LAST_PUSH_TIMESTAMP, testset_deleted: Array.from(tsDeleted()), testset_added: tsAdded(), designer_notes_edited: notes, active_testset: activeTestset() };
+    const bundle = { exported_at: new Date().toISOString(), report_version: LAST_PUSH_TIMESTAMP, testset_deleted: Array.from(tsDeleted()), testset_added: tsAdded(), testset_added_types: Object.fromEntries(Object.keys(tsMeta()).map(t=>[t, tsSourceKey(t)])), designer_notes_edited: notes, active_testset: activeTestset(), active_testset_typed: activeTestsetTyped() };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'my-report-changes.json'; document.body.appendChild(a); a.click(); a.remove();
     showSnackbar(currentLocale==='zh'?'已导出 my-report-changes.json，发给维护者即可同步':'Exported my-report-changes.json — send it to the maintainer to sync');
@@ -3012,7 +3023,7 @@ function wireTestSet(container){
   card.querySelectorAll('#tsChips .chip').forEach(ch=>ch.addEventListener('click', ()=>{ testsetFilter = ch.dataset.g; pageRenderers.promptset(container); }));
   const dl = card.querySelector('#tsDownload');
   if(dl) dl.addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(activeTestset(), null, 2)], {type:'application/json'});
+    const blob = new Blob([JSON.stringify(activeTestsetTyped(), null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ai-image-prompt-testset.json'; document.body.appendChild(a); a.click(); a.remove();
   });
 }
