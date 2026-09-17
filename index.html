@@ -1471,7 +1471,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T12:36:55Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-17T12:43:04Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -2980,7 +2980,9 @@ function tsSaveCustomCats(o){ try{ localStorage.setItem(TS_CATS_KEY, JSON.string
 function tsIsCustomCat(g, c){ return ((tsCustomCats()[g])||[]).includes(c); }
 function tsIsBakedCustomCat(g, c){ return (((DATA.testset_custom_default||{})[g])||[]).includes(c); }
 let tsNamingGroup = null;   // group whose "new card" form is open
+function tsVersion(){ const ts = DATA.testset||{}; let n=0, s=''; for(const cats of Object.values(ts)) for(const arr of Object.values(cats)){ n+=arr.length; if(arr.length) s+=arr[0].slice(0,12)+arr[arr.length-1].slice(-12); } return n+':'+s.length+':'+(s.split('').reduce((h,ch)=>((h*31)+ch.charCodeAt(0))>>>0, 7)); }
 function tsSanitizeLocal(){
+  try{ const v = tsVersion(); if(localStorage.getItem('testset_baseline_v1') !== v){ localStorage.setItem('testset_baseline_v1', v); if(localStorage.getItem('testset_deleted_v1')){ localStorage.removeItem('testset_deleted_v1'); } } }catch(e){}
   // additions and custom cards that have since been baked into the defaults must not show twice
   const defaults = new Set(); for(const cats of Object.values(DATA.testset||{})) for(const arr of Object.values(cats)) arr.forEach(p=>defaults.add(p));
   const add = tsAdded(); let changed = false;
@@ -3032,7 +3034,7 @@ function tsAddPanel(g, cat){
   if(tsAddMode==='user'){
     const cands = tsCandidates(g, cat, 'auto'); let helper = '';
     if(cands.length){ const c = cands[tsAddIdx % cands.length];
-      helper = `<div class="cluster-card" style="padding:10px 12px; margin-bottom:8px;"><div class="type-label-sm on-surface-variant mb-1">${zh?'自动补选（按本类目规则从 150 万条中筛出，尚未收录）':'Auto-pick (rule-filtered from 1.5M, not yet in the set)'} · ${tsAddIdx % cands.length + 1}/${cands.length}</div><div class="type-body-sm ts-cand-text" style="white-space:pre-wrap;">${escapeHtml(c.text)}</div>
+      helper = `<div class="cluster-card ts-cand" data-text="${escapeHtml(c.text)}" style="padding:10px 12px; margin-bottom:8px;"><div class="type-label-sm on-surface-variant mb-1">${zh?'自动补选（按本类目规则从 150 万条中筛出，尚未收录）':'Auto-pick (rule-filtered from 1.5M, not yet in the set)'} · ${tsAddIdx % cands.length + 1}/${cands.length} · ${zh?'输入框留空并保存 = 直接加入这条':'leave the box empty and save to add this one'}</div><div class="type-body-sm ts-cand-text" style="white-space:pre-wrap;">${escapeHtml(c.text)}</div>
         <div class="flex items-center gap-2 mt-2" style="justify-content:flex-end;"><button class="btn btn-text ts-add-next" style="padding:0 8px;"><span class="msr sm">refresh</span>${zh?'换一条':'Another'}</button><button class="btn btn-text ts-add-fill" data-text="${escapeHtml(c.text)}" style="padding:0 8px;"><span class="msr sm">arrow_downward</span>${zh?'填入下方':'Use this'}</button></div></div>`; }
     body = helper + ta(zh?'粘贴或输入一条真实用户请求…':'Paste or type a real user request…') + actions('user');
   } else if(tsAddMode==='popular'){
@@ -3118,7 +3120,10 @@ function wireTestSet(container){
   card.querySelectorAll('.ts-add-cancel').forEach(b=>b.addEventListener('click', ()=>{ tsAddingKey = null; pageRenderers.promptset(container); }));
   card.querySelectorAll('.ts-add-save').forEach(b=>b.addEventListener('click', ()=>{
     const form = b.closest('.ts-add-form'); const mode = b.dataset.mode||'manual';
-    const text = (form.querySelector('.ts-add-input').value||'').trim(); if(!text) return;
+    let text = (form.querySelector('.ts-add-input').value||'').trim();
+    if(!text && mode==='user'){ const cand = form.querySelector('.ts-cand'); if(cand) text = cand.dataset.text||''; }
+    if(!text){ showSnackbar(currentLocale==='zh'?'请先输入 prompt 再保存':'Type a prompt before saving'); return; }
+    const have = new Set(((activeTestset()[form.dataset.g]||{})[form.dataset.cat])||[]); if(have.has(text)){ showSnackbar(currentLocale==='zh'?'这条已经在该类目里了':'This prompt is already in the category'); return; }
     const add = tsAdded(); add[form.dataset.g] = add[form.dataset.g]||{}; add[form.dataset.g][form.dataset.cat] = (add[form.dataset.g][form.dataset.cat]||[]).concat([text]); tsSaveAdded(add);
     const meta = tsMeta(); meta[text] = mode; tsSaveMeta(meta);
     tsAddingKey = null;
