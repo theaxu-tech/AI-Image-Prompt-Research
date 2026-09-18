@@ -1471,7 +1471,7 @@ const DEFAULT_BANNER_SVG = `
 </svg>`;
 
 // This timestamp is updated to the current time each time a new version is pushed.
-const LAST_PUSH_TIMESTAMP = '2026-09-17T12:43:04Z';
+const LAST_PUSH_TIMESTAMP = '2026-09-18T02:26:05Z';
 function showLastUpdated(){
   const el = document.getElementById('bannerUpdated');
   if(!el) return;
@@ -3011,7 +3011,7 @@ const TS_META_KEY = 'testset_added_meta_v1';
 function tsMeta(){ try{ return JSON.parse(localStorage.getItem(TS_META_KEY)||'{}'); }catch(e){ return {}; } }
 function tsSaveMeta(o){ try{ localStorage.setItem(TS_META_KEY, JSON.stringify(o)); }catch(e){} }
 function tsSourceKey(text){ const s = tsMeta()[text] || (DATA.testset_sources||{})[text] || 'manual'; return s==='auto' ? 'user' : s; }
-function tsSourceLabel(text){ const s = tsSourceKey(text); const zh = currentLocale==='zh'; return s==='user' ? (zh?'用户真实请求':'real user request') : s==='popular' ? (zh?'社区常见写法':'community phrasing') : (zh?'设计师手写':'designer-written'); }
+function tsSourceLabel(text){ const s = tsSourceKey(text); const zh = currentLocale==='zh'; return s==='user' ? (zh?'用户真实请求':'real user request') : s==='popular' ? (zh?'社区常见写法 @Shane':'community phrasing @Shane') : (zh?'设计师手写':'designer-written'); }
 function activeTestsetTyped(){
   const del = tsDeleted(); const add = tsAdded(); const out = {};
   const cc = tsCustomCats(); const act = activeTestset();
@@ -3046,7 +3046,7 @@ function tsAddPanel(g, cat){
     <div class="type-label-sm on-surface-variant mb-1">${zh?'选择 prompt 类型（导出时以此区分）':'Choose the prompt type (used to tag exports)'}</div>
     <div class="chip-row mb-2" style="flex-wrap:wrap;">
       ${opt('user','person', zh?'用户真实请求':'Real user request', zh?'来自真实用户的请求，可自动补选或手动粘贴':'A real user request — auto-pick or paste')}
-      ${opt('popular','trending_up', zh?'社区常见写法':'Community phrasing', zh?'社区里流行、常见的写法':'Popular phrasing seen in the community')}
+      ${opt('popular','trending_up', zh?'社区常见写法 @Shane':'Community phrasing @Shane', zh?'社区里流行、常见的写法（由 Shane 提供）':'Popular phrasing seen in the community (provided by Shane)')}
       ${opt('manual','edit', zh?'设计师手写':'Designer-written', zh?'设计师撰写的高质量 prompt':'High-quality prompt written by a designer')}
     </div>
     ${body || `<div class="flex" style="justify-content:flex-end;"><button class="btn btn-text ts-add-cancel" style="padding:0 8px;">${zh?'取消':'Cancel'}</button></div>`}
